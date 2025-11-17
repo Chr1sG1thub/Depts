@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>French Département Plate Tracker</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.3/dist/leaflet.css"
+    integrity="sha256-sA+Uu4TxgR+kO51k+lOQZf+imqEl1i2xbz9jXp6+AAk="
+    crossorigin=""
+  />
+  <style>
+    #map {
+      height: 600px;
+    }
+    body {
+      font-family: Arial, sans-serif;
+      margin: 10px;
+    }
+    label, input, button {
+      font-size: 16px;
+      margin: 5px 0;
+    }
+  </style>
+</head>
+<body>
+  <h2>Track Seen French Départements</h2>
+  <label for="dept-input">Enter département number (e.g. 75): </label>
+  <input type="text" id="dept-input" maxlength="3" />
+  <button id="mark-seen">Mark as Seen</button>
+  <div id="map"></div>
+
+  <script
+    src="https://unpkg.com/leaflet@1.9.3/dist/leaflet.js"
+    integrity="sha256-W+wppb8RLnchvEVU6yYqLChudueHQffkYPv4qtU4vUM="
+    crossorigin=""
+  ></script>
+  <script>
+    // Map initialization centered roughly on France
+    const map = L.map("map").setView([46.5, 2.5], 6);
+
+    // Base tiles from OpenStreetMap
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 10,
+      attribution: '© OpenStreetMap contributors',
+    }).addTo(map);
+
+    // Store département layers for quick access
+    const deptLayers = {};
+
+    // Function to style départements initially red
+    function style(feature) {
+      return {
+        fillColor: "red",
+        weight: 1,
+        opacity: 1,
+        color: "white",
+        fillOpacity: 0.7,
+      };
+    }
+
+    // Load départements GeoJSON from a public source
+    async function loadDepartements() {
+      const response = await fetch(
+        "https://raw.githubusercontent.com/gregoiredavid/france-geojson/master/departements.geojson"
+      );
+      const geojson = await response.json();
+
+      // Add GeoJSON layer to map
+      L.geoJSON(geojson, {
+        style: style,
+        onEachFeature: (feature, layer) => {
+          // Store layer by département number for lookup
+          const num = feature.properties.code;
+          deptLayers[num] = layer;
+
+          // Add popup to show département name and number
+          layer.bindPopup(
+            `<strong>${feature.properties.nom}</strong><br>Département: ${num}`
+          );
+        },
+      }).addTo(map);
+    }
+
+    loadDepartements();
+
+    // When user clicks "Mark as Seen"
+    document.getElementById("mark-seen").onclick = () => {
+      const input = document.getElementById("dept-input").value.trim();
+      if (deptLayers[input]) {
+        // Change fill color to green
+        deptLayers[input].setStyle({ fillColor: "green" });
+        deptLayers[input].openPopup();
+      } else {
+        alert("Invalid département number");
+      }
+    };
+  </script>
+</body>
+</html>
