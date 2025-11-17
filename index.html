@@ -12,6 +12,7 @@
   <style>
     #map {
       height: 600px;
+      margin-bottom: 20px;
     }
     body {
       font-family: Arial, sans-serif;
@@ -27,6 +28,30 @@
       text-shadow: 0 0 3px black;
       pointer-events: none;
     }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      max-width: 400px;
+      margin-top: 10px;
+      cursor: default;
+    }
+    th, td {
+      border: 1px solid #ddd;
+      padding: 8px;
+      text-align: left;
+    }
+    th {
+      background-color: #4CAF50;
+      color: white;
+      cursor: pointer;
+      user-select: none;
+    }
+    th.sort-asc::after {
+      content: " ▲";
+    }
+    th.sort-desc::after {
+      content: " ▼";
+    }
   </style>
 </head>
 <body>
@@ -34,7 +59,9 @@
   <label for="dept-input">Enter département number (e.g. 75): </label>
   <input type="text" id="dept-input" maxlength="3" />
   <button id="mark-seen">Mark as Seen</button>
+  <button id="show-unseen">Show Unseen départements</button>
   <div id="map"></div>
+  <div id="unseen-table-container"></div>
 
   <script src="https://unpkg.com/leaflet@1.9.3/dist/leaflet.js" crossorigin=""></script>
   <script>
@@ -47,8 +74,11 @@
 
     const deptLayers = {};
     let seenDepts = JSON.parse(localStorage.getItem("seenDepts") || "{}");
+    let departementsList = [];
 
-    // Style départements: green if seen, else red
+    let currentSortColumn = null;
+    let currentSortAsc = true;
+
     function style(feature) {
       const num = feature.properties.code;
       return {
@@ -66,6 +96,11 @@
       );
       const geojson = await response.json();
 
+      departementsList = geojson.features.map(f => ({
+        code: f.properties.code,
+        name: f.properties.nom,
+      }));
+
       L.geoJSON(geojson, {
         style: style,
         onEachFeature: (feature, layer) => {
@@ -76,7 +111,6 @@
             `<strong>${feature.properties.nom}</strong><br>Département: ${num}`
           );
 
-          // Add département number label at polygon centroid
           const centroid = layer.getBounds().getCenter();
           const label = L.marker(centroid, {
             icon: L.divIcon({
@@ -102,6 +136,76 @@
       } else {
         alert("Invalid département number");
       }
+    };
+
+    function sortDepartements(list, column, asc) {
+      return list.sort((a, b) => {
+        let v1 = a[column];
+        let v2 = b[column];
+        // For code, treat as number, else string
+        if (column === "code") {
+          v1 = Number(v1);
+          v2 = Number(v2);
+        } else {
+          v1 = v1.toLowerCase();
+          v2 = v2.toLowerCase();
+        }
+        if (v1 > v2) return asc ? 1 : -1;
+        if (v1 < v2) return asc ? -1 : 1;
+        return 0;
+      });
+    }
+
+    function renderTable(unseen) {
+      if (unseen.length === 0) {
+        document.getElementById("unseen-table-container").innerHTML =
+          "<p>All départements have been seen!</p>";
+        return;
+      }
+
+      let html = "<table><thead><tr>";
+      html += `<th data-column="code">Département Code</th><th data-column="name">Name</th>`;
+      html += "</tr></thead><tbody>";
+
+      for (const d of unseen) {
+        html += `<tr><td>${d.code}</td><td>${d.name}</td></tr>`;
+      }
+      html += "</tbody></table>";
+
+      document.getElementById("unseen-table-container").innerHTML = html;
+
+      // Add click listeners to headers for sorting
+      const headers = document.querySelectorAll("#unseen-table-container th");
+      headers.forEach(header => {
+        header.classList.remove("sort-asc", "sort-desc");
+        if (header.dataset.column === currentSortColumn) {
+          header.classList.add(currentSortAsc ? "sort-asc" : "sort-desc");
+        }
+        header.style.cursor = "pointer";
+        header.onclick = () => {
+          const column = header.dataset.column;
+          if (currentSortColumn === column) {
+            currentSortAsc = !currentSortAsc;
+          } else {
+            currentSortColumn = column;
+            currentSortAsc = true;
+          }
+          const unseenSorted = sortDepartements(unseen.slice(), currentSortColumn, currentSortAsc);
+          renderTable(unseenSorted);
+        };
+      });
+    }
+
+    document.getElementById("show-unseen").onclick = () => {
+      if (!departementsList.length) {
+        alert("Departements data not loaded yet.");
+        return;
+      }
+      const unseen = departementsList.filter(d => !seenDepts[d.code]);
+      currentSortColumn = "code";
+      currentSortAsc = true;
+      const unseenSorted = sortDepartements(unseen.slice(), currentSortColumn, currentSortAsc);
+      renderTable(unseenSorted);
     };
   </script>
 </body>
